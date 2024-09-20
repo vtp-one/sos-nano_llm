@@ -1,0 +1,51 @@
+services:
+  application:
+    image: ${TARGET_IMAGE}
+    pull_policy: never
+    hostname: application
+
+    profiles:
+      - default
+
+    ports:
+      - ${SERVICE_PORT}:${SERVICE_PORT}
+      - ${WS_PORT}:${WS_PORT}
+
+    stop_signal: SIGKILL
+
+    command: ["python3", "-m", "nano_llm.studio", "--web-host=${SERVICE_HOST}", "--web-port=${SERVICE_PORT}", "--ws-port=${WS_PORT}"]
+
+    healthcheck:
+      test: ["CMD", "curl", "-k", "https://localhost:${SERVICE_PORT}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+      start_interval: 5s
+
+  application-dev:
+    image: ${TARGET_IMAGE}
+    pull_policy: never
+    hostname: application-dev
+
+    profiles:
+      - dev
+
+    ports:
+      - ${SERVICE_PORT}:${SERVICE_PORT}
+      - ${WS_PORT}:${WS_PORT}
+
+    volumes:
+      - ${NANO_LLM_WORKING_DIR}:/opt/NanoLLM/
+
+    stop_signal: SIGKILL
+
+    command: ["python3", "-m", "nano_llm.studio", "--web-host=${SERVICE_HOST}", "--web-port=${SERVICE_PORT}", "--ws-port=${WS_PORT}"]
+
+    healthcheck:
+      test: ["CMD", "curl", "-k", "https://localhost:${SERVICE_PORT}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+      start_interval: 5s

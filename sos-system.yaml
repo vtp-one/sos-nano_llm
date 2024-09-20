@@ -1,0 +1,253 @@
+meta:
+  sos_version: v0.0.1
+  system_name: sos-nano_llm
+  system_version: v0.24.7
+  system_internal: internal
+  system_description: NanoLLM is a lightweight, optimized library for LLM inference and multimodal agents.
+  profile: default
+
+namespace:
+  nano_llm_image: dustynv/nano_llm:r36.2.0
+
+  runtime:
+    compose_file: docker-compose.yaml
+    protocol: https
+    host: 0.0.0.0
+    port: "8050"
+    ws_port: "9050"
+
+  nano_llm:
+    git_target: https://github.com/dusty-nv/NanoLLM.git
+    branch_target: "24.7"
+    working_dir: null
+    exists:
+      label: nano_llm working dir exists
+      ctx_key: namespace.nano_llm.working_dir
+      valid: null
+      is_inverse: True
+      raise_exc: False
+
+service:
+  dev_mode: True
+  local_data: True
+
+action:
+  sos_help:
+    label: print help
+    tool: terminal.print_object
+    params:
+      horizontal_rule: True
+      obj:
+        - SOS-Nano_LLM: ${meta.system_description}
+        - Install:
+          - sos-toolkit setup
+          - sos-toolkit install
+        - Run:
+          - sos-toolkit up
+        - Stop:
+          - sos-toolkit down
+
+  sos_setup:
+    local_data: ${service.local_data.action.setup}
+
+  sos_install:
+    pull_image: ${action.sos_build.pull_image}
+
+  sos_dev:
+    dev_enable: ${service.dev_mode.action.enable}
+
+    nano_llm:
+      label: nano_llm git clone
+      tool: git.repo_clone
+      context_map:
+        - label: generate nano_llm remote target
+          result: remote_target
+          data: namespace.nano_llm.git_target
+        - label: get nano_llm branch
+          result: remote_branch
+          data: namespace.nano_llm.branch_target
+        - label: get local target
+          result: local_target
+          data:
+            - source: meta.system_internal
+              target: root
+            - source: null
+              target: local
+              default: NanoLLM
+          path_join: True
+      result_map:
+        - label: set output working dir
+          result: namespace.nano_llm.working_dir
+          data: working_dir
+
+  sos_build:
+    dev_mode: ${service.dev_mode.action.is_enabled}
+
+    pull_image:
+      does_image_exist:
+        label: check if the docker image exists
+        tool: docker.image_exists
+        context_map:
+          - label: get image tag
+            result: target
+            data: namespace.nano_llm_image
+        result_map:
+          - label: set image exists result
+            result: __TARGET__
+            data: result
+
+      pull_image:
+        label: pull image if it doesn't exit
+        tool: docker.image_load
+        disabled: False
+        params:
+          source: registry
+        context_map:
+          - label: get image tag
+            result: target
+            data: namespace.nano_llm_image
+        condition:
+          - label: if image does not exist
+            ctx_key: __TARGET__
+            valid: False
+            comparison: equal
+            raise_exc: False
+
+  sos_up:
+    compose:
+      tool: docker.compose_up
+      context_map:
+        - label: get profile
+          result: profile
+          data: meta.profile
+        - label: generate compose file target
+          result: file
+          data:
+            - source: meta.system_path
+              target: system_path
+            - source: namespace.runtime.compose_file
+              target: compose_file
+          path_join: True
+        - label: get project name
+          result: project_name
+          data: meta.system_name
+        - label: generate env_map
+          result: env_map
+          data:
+            - target: TARGET_IMAGE
+              source: namespace.nano_llm_image
+            - target: SERVICE_HOST
+              source: namespace.runtime.host
+            - target: SERVICE_PORT
+              source: namespace.runtime.port
+            - target: WS_PORT
+              source: namespace.runtime.ws_port
+            - target: NANO_LLM_WORKING_DIR
+              source: namespace.nano_llm.working_dir
+
+    service_address:
+      tool: terminal.print_object
+      disabled: False
+      params:
+        horizontal_rule: True
+      context_map:
+        - label: generate service address
+          result: obj
+          data:
+            - source: null
+              target: preamble
+              default: "NANO LLM RUNNING ON:"
+            - source: namespace.runtime.protocol
+              target: protocol
+            - source: namespace.runtime.host
+              target: host
+            - source: namespace.runtime.port
+              target: port
+          format_string: "{preamble} {protocol}://{host}:{port}"
+
+  sos_down:
+    compose:
+      tool: docker.compose_down
+      disabled: False
+      force: False
+      context_map:
+        - label: get project name
+          result: project_name
+          data: meta.system_name
+
+  sos_status:
+    root:
+      label: root git status
+      tool: git.repo_status
+      disabled: False
+      context_map:
+        - label: get working_dir
+          result: working_dir
+          data: meta.system_path
+
+  sos_commit:
+    root:
+      label: root git commit
+      tool: git.repo_commit
+      context_map:
+        - label: get working_dir
+          result: working_dir
+          data: meta.system_path
+
+    nano_llm:
+      label: nano_llm git commit
+      tool: git.repo_commit
+      condition:
+        - ${namespace.nano_llm.exists}
+      context_map:
+        - label: get working_dir
+          result: working_dir
+          data: namespace.nano_llm.working_dir
+
+    default:
+      dev_mode: ${service.dev_mode.action.is_enabled_exc}
+      root: ${action.sos_commit.root}
+      nano_llm: ${action.sos_commit.nano_llm}
+
+  sos_clean:
+    system_down: ${action.sos_down}
+
+    nano_llm_image:
+      image_exists:
+        label: check image exists
+        tool: docker.image_exists
+        context_map:
+          - label: get nano_llm image tag
+            result: target
+            data: namespace.nano_llm_image
+        result_map:
+          - label: result to __TARGET__
+            result: __TARGET__
+            data: result
+      delete_image:
+        label: delete image if exists
+        tool: docker.image_delete
+        context_map:
+          - label: get nano_llm image tag
+            result: target
+            data: namespace.nano_llm_image
+        condition:
+          - label: if image exists
+            ctx_key: __TARGET__
+            valid: True
+            is_inverse: False
+            raise_exc: False
+
+    nano_llm_dir:
+      label: delete nano_llm
+      tool: filesystem.directory_delete
+      params:
+        ignore_errors: True
+      condition:
+        - ${namespace.nano_llm.exists}
+      context_map:
+        - label: get nano_llm working directory
+          result: target
+          data: namespace.nano_llm.working_dir
+
+    local_data: ${service.local_data.action.clean}
